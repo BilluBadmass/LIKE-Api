@@ -18,7 +18,7 @@ def load_accounts():
     return []
 
 async def fetch_token(session, uid, password):
-    url = f"https://gpl-jwt.vercel.app/get?uid={uid}&password={password}"
+    url = f"https://jwt-maker-by-billu.vercel.app/get-token?uid={uid}&password={password}"
     try:
         async with session.get(url, timeout=10) as res:
             if res.status == 200:
