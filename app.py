@@ -9,18 +9,14 @@ from google.protobuf.message import DecodeError
 
 app = Flask(__name__)
 
-# This code create by jobayar ahmed 
-# This code create by jobayar ahmed 
-# This code create by jobayar ahmed 
-# This code create by jobayar ahmed 
-
 ACCOUNTS_FILE = 'accounts.json'
 
-# ✅ Download accounts
 def load_accounts():
-    return json.load(open(ACCOUNTS_FILE)) if os.path.exists(ACCOUNTS_FILE) else {}
+    if os.path.exists(ACCOUNTS_FILE):
+        with open(ACCOUNTS_FILE) as f:
+            return json.load(f)
+    return []
 
-# ✅ Fetch tokens from API
 async def fetch_token(session, uid, password):
     url = f"https://gpl-jwt.vercel.app/get?uid={uid}&password={password}"
     try:
@@ -39,17 +35,17 @@ async def fetch_token(session, uid, password):
         return None
     return None
 
-# ✅ Bring all the tokens
 async def get_tokens_live():
     accounts = load_accounts()
-    tokens = []
     async with aiohttp.ClientSession() as session:
-        tasks = [fetch_token(session, uid, password) for uid, password in accounts.items()]
+        tasks = [
+            fetch_token(session, acc["uid"], acc["password"])
+            for acc in accounts
+            if "uid" in acc and "password" in acc
+        ]
         results = await asyncio.gather(*tasks)
-        tokens = [token for token in results if token]
-    return tokens
+        return [token for token in results if token]
 
-# ✅ Encryption
 def encrypt_message(plaintext):
     key = b'Yg&tc%DEuh6%Zc^8'
     iv = b'6oyZDr22E3ychjM%'
@@ -78,57 +74,57 @@ def decode_protobuf(binary):
 def make_request(enc_uid, token):
     url = "https://clientbp.ggblueshark.com/GetPlayerPersonalShow"
     headers = {
-            'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
-            'Connection': "Keep-Alive",
-            'Accept-Encoding': "gzip",
-            'Authorization': f"Bearer {token}",
-            'Content-Type': "application/x-www-form-urlencoded",
-            'Expect': "100-continue",
-            'X-Unity-Version': "2018.4.11f1",
-            'X-GA': "v1 1",
-            'ReleaseVersion': "OB50"
-        }
+        'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
+        'Connection': "Keep-Alive",
+        'Accept-Encoding': "gzip",
+        'Authorization': f"Bearer {token}",
+        'Content-Type': "application/x-www-form-urlencoded",
+        'Expect': "100-continue",
+        'X-Unity-Version': "2018.4.11f1",
+        'X-GA': "v1 1",
+        'ReleaseVersion': "OB50"
+    }
     try:
         res = requests.post(url, data=bytes.fromhex(enc_uid), headers=headers, verify=False)
         return decode_protobuf(res.content)
     except:
         return None
 
-# ✅ Send one like
-async def send_request(enc_uid, token):
+async def send_request(session, enc_uid, token):
     url = "https://clientbp.ggblueshark.com/LikeProfile"
     headers = {
-            'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
-            'Connection': "Keep-Alive",
-            'Accept-Encoding': "gzip",
-            'Authorization': f"Bearer {token}",
-            'Content-Type': "application/x-www-form-urlencoded",
-            'Expect': "100-continue",
-            'X-Unity-Version': "2018.4.11f1",
-            'X-GA': "v1 1",
-            'ReleaseVersion': "OB50"
-        }
+        'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
+        'Connection': "Keep-Alive",
+        'Accept-Encoding': "gzip",
+        'Authorization': f"Bearer {token}",
+        'Content-Type': "application/x-www-form-urlencoded",
+        'Expect': "100-continue",
+        'X-Unity-Version': "2018.4.11f1",
+        'X-GA': "v1 1",
+        'ReleaseVersion': "OB50"
+    }
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, data=bytes.fromhex(enc_uid), headers=headers) as r:
-                return r.status
+        async with session.post(url, data=bytes.fromhex(enc_uid), headers=headers) as r:
+            return r.status
     except:
         return None
 
-    # ✅ Send likes to all tokens
 async def send_likes(uid, tokens):
     enc_uid = encrypt_message(create_like_proto(uid))
-    tasks = [send_request(enc_uid, token) for token in tokens]
-    return await asyncio.gather(*tasks)
+    async with aiohttp.ClientSession() as session:
+        tasks = [send_request(session, enc_uid, token) for token in tokens]
+        return await asyncio.gather(*tasks)
 
-# ✅ End Point
+def run_async(coro):
+    return asyncio.new_event_loop().run_until_complete(coro)
+
 @app.route('/like', methods=['GET'])
 def like_handler():
     uid = request.args.get("uid")
     if not uid:
         return jsonify({"error": "Missing UID"}), 400
 
-    tokens = asyncio.run(get_tokens_live())
+    tokens = run_async(get_tokens_live())
     if not tokens:
         return jsonify({"error": "No valid tokens available"}), 401
 
@@ -141,7 +137,7 @@ def like_handler():
     likes_before = int(before_data.get("AccountInfo", {}).get("Likes", 0))
     nickname = before_data.get("AccountInfo", {}).get("PlayerNickname", "Unknown")
 
-    responses = asyncio.run(send_likes(uid, tokens))
+    responses = run_async(send_likes(uid, tokens))
     success_count = sum(1 for r in responses if r == 200)
 
     after = make_request(enc_uid, tokens[0])
@@ -162,8 +158,7 @@ def like_handler():
 
 @app.route('/')
 def home():
-    return jsonify({"status": "online", "message": "Like API is running ✅"})
+    return jsonify({"status": "online", "message": "Like API is running"})
 
-# ✅ This is not used in Vercel, but we leave it for local operation.
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
